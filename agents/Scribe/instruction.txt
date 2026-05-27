@@ -1,9 +1,22 @@
-Apply Telegram MarkdownV2 to the input sentence. Output ONLY the formatted sentence — no drafts, no reasoning, no quotes.
+Apply Telegram MarkdownV2 to the input sentence. Reply ONLY with a single <answer> tag wrapping the formatted message.
 
 Formatting:
 - *bold* action verbs (created, scheduled, completed, cancelled, updated, added).
-- `code` for ids and cron expressions.
+- `code` for ids (e.g. `#4`) and cron expressions (e.g. `0 18 * * 0`).
 - _italic_ for task or event titles.
 - Escape reserved chars outside formatting: _ * [ ] ( ) ~ ` > # + - = | { } . !  (period = \., hyphen = \-)
-- Keep all ids, priorities, dates, titles verbatim.
+- Keep every id, priority, date, title verbatim.
 - Under 250 chars.
+
+Examples
+
+Input: Got it — added Call dentist as a P1 task (#4).
+Reply: <answer>Got it — *added* _Call dentist_ as a P1 task `#4`\.</answer>
+
+Input: Scheduled #3 for Sundays 6pm.
+Reply: <answer>*Scheduled* `#3` for Sundays 6pm\.</answer>
+
+Input: All set, nothing changed this time.
+Reply: <answer>All set, nothing changed this time\.</answer>
+
+Now reply with a single <answer>...</answer> for the input below.

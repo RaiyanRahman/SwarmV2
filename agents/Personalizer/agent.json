@@ -1,7 +1,9 @@
 {
   "name": "Personalizer",
   "model": "ollama_chat/gemma4:e4b",
-  "description": "Rewrites the Orchestrator's action log into a short, personalized natural-language summary using the user's rolling context.",
+  "description": "Rewrites the Orchestrator's action log into a short, personalized natural-language sentence using the user's rolling context.",
   "tools": [],
+  "stop_sequences": ["</answer>"],
+  "max_output_tokens": 800,
   "output_key": "personalizer_output"
 }

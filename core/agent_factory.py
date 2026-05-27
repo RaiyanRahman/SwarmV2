@@ -146,6 +146,21 @@ def _build_agent(config_path: Path, reg: "AgentRegistry"):
     if "output_key" in data:
         kwargs["output_key"] = data["output_key"]
 
+    # Optional generation tuning: stop_sequences cuts off the model the moment
+    # it emits any of these strings, which we use to halt chain-of-thought
+    # dumps once the model produces its closing answer tag.
+    stop_sequences = data.get("stop_sequences") or []
+    max_output_tokens = data.get("max_output_tokens")
+    if stop_sequences or max_output_tokens is not None:
+        from google.genai import types  # type: ignore
+
+        cfg_kwargs: dict = {}
+        if stop_sequences:
+            cfg_kwargs["stop_sequences"] = list(stop_sequences)
+        if max_output_tokens is not None:
+            cfg_kwargs["max_output_tokens"] = int(max_output_tokens)
+        kwargs["generate_content_config"] = types.GenerateContentConfig(**cfg_kwargs)
+
     return LlmAgent(**kwargs)
 
 

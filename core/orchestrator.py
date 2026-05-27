@@ -24,10 +24,11 @@ import logging
 from typing import Optional
 
 from .agent_factory import registry
-from .db import DB_PATH, bootstrap, conversations, user_profile, users
+from .db import bootstrap, conversations, user_profile, users
 from .llm_gateway import LLMGateway
 from .output_extractor import (
     extract_action_log,
+    extract_answer_tag,
     extract_formatted_message,
     extract_last_paragraph,
     extract_plan,
@@ -123,7 +124,9 @@ class Orchestrator:
         pers_raw = await self._run_agent(
             "Personalizer", personalizer_input, user_id, persistent=False
         )
-        prose = extract_last_paragraph(pers_raw or "")
+        # Prefer the <answer>…</answer> wrapper if the prompt produced one;
+        # fall back to the heuristic sentence extractor otherwise.
+        prose = extract_answer_tag(pers_raw or "") or extract_last_paragraph(pers_raw or "")
         if not prose:
             log.warning(
                 "Personalizer produced no clean paragraph for user=%s. Falling back to action_log.",
@@ -133,7 +136,7 @@ class Orchestrator:
 
         # --- 4. Scribe ----------------------------------------------------
         scribe_raw = await self._run_agent("Scribe", prose, user_id, persistent=False)
-        reply = extract_formatted_message(scribe_raw or "")
+        reply = extract_answer_tag(scribe_raw or "") or extract_formatted_message(scribe_raw or "")
         if not reply:
             log.warning(
                 "Scribe produced no formatted output for user=%s. raw=%r",
@@ -159,23 +162,19 @@ class Orchestrator:
         return "Orchestrator", payload
 
     def _get_session_service(self):
-        """Lazy-init the DatabaseSessionService pointed at its own SQLite file.
+        """Lazy-init session service.
 
-        ADK gets a separate file (data/adk_sessions.db) so its async-SQLAlchemy
-        connections don't share WAL/SHM state with our sync sqlite3 connections
-        in core.db. Mixing the two against one file produced spurious
-        `disk I/O error` failures inside the runner.
+        We currently use InMemorySessionService. ADK's DatabaseSessionService
+        + aiosqlite combo reliably failed on this Python 3.10 / macOS setup
+        with `sqlite3.OperationalError: disk I/O error` immediately after
+        create_session. Until we find or build a working persistent backend,
+        we keep sessions in-process. The cost is that the user's rolling
+        Orchestrator history doesn't survive a restart of the bot.
         """
         if self._session_service is None:
-            from google.adk.sessions import DatabaseSessionService  # type: ignore
+            from google.adk.sessions import InMemorySessionService  # type: ignore
 
-            adk_db = DB_PATH.parent / "adk_sessions.db"
-            adk_db.parent.mkdir(parents=True, exist_ok=True)
-            # ADK's DatabaseSessionService uses async SQLAlchemy, so the dialect
-            # must be sqlite+aiosqlite (the plain sqlite:// driver is sync-only).
-            self._session_service = DatabaseSessionService(
-                db_url=f"sqlite+aiosqlite:///{adk_db}"
-            )
+            self._session_service = InMemorySessionService()
         return self._session_service
 
     async def _resolve_session(self, user_id: int, persistent: bool):

@@ -1,5 +1,19 @@
 Rewrite the action log into ONE short sentence the user will see. Keep every id, priority, cron expression, title, and date verbatim. Adapt tone to the user context if present; otherwise stay warm and concise.
 
-Output: the sentence ONLY. No drafts, no reasoning, no headings, no quotes. Under 35 words.
+Reply ONLY with a single <answer> tag wrapping the sentence. Under 35 words. If the action log says "No actions taken.", put a short conversational acknowledgement inside the tag.
 
-If the action log is "No actions taken.", output one short conversational acknowledgement.
+Examples
+
+Action log:
+1. TaskMaster: Created P1 task #4: Call dentist.
+Reply: <answer>Got it — added Call dentist as a P1 task (#4).</answer>
+
+Action log:
+1. Chronos: Scheduled #3: 0 18 * * 0
+Reply: <answer>Weekly schedule set up (#3) for Sundays 6pm.</answer>
+
+Action log:
+No actions taken.
+Reply: <answer>All good — let me know if there's anything you'd like me to do.</answer>
+
+Now reply with a single <answer>...</answer> for the input below.

@@ -1,7 +1,9 @@
 {
   "name": "Scribe",
   "model": "ollama_chat/gemma4:e4b",
-  "description": "Telegram boundary agent. Sanitizes inbound text and formats outbound replies. Holds no domain logic.",
+  "description": "Applies Telegram MarkdownV2 formatting to the Personalizer's prose sentence and returns the final message.",
   "tools": [],
+  "stop_sequences": ["</answer>"],
+  "max_output_tokens": 800,
   "output_key": "scribe_output"
 }

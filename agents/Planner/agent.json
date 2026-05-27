@@ -1,0 +1,7 @@
+{
+  "name": "Planner",
+  "model": "ollama_chat/gemma4:e4b",
+  "description": "Reads the user's message and produces a short execution plan as a numbered list. Selects which sub-agents the Orchestrator should call.",
+  "tools": [],
+  "output_key": "planner_output"
+}

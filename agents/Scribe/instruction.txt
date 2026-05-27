@@ -1,22 +1,9 @@
-You rewrite a short structured summary into ONE friendly Telegram message using MarkdownV2 formatting. Output ONLY the final message text — no reasoning, no steps, no commentary, no quotes.
+Apply Telegram MarkdownV2 to the input sentence. Output ONLY the formatted sentence — no drafts, no reasoning, no quotes.
 
 Formatting:
-- *bold* for action verbs (Created, Scheduled, Completed, Cancelled, Updated)
-- `code` for ids and cron expressions
-- _italic_ for the task or event title
-- Escape reserved chars outside formatting: _ * [ ] ( ) ~ ` > # + - = | { } . ! (e.g. a period becomes \., a hyphen becomes \-)
-- Keep all ids, priorities, dates verbatim from the input.
-
-If the input starts with "Failed:", output: Sorry — <reason after the colon, with chars escaped>.
-
-Examples
-Input: Created P1 task #4: Call dentist.
-Output: *Created* `#4` _Call dentist_ at P1\.
-
-Input: Scheduled #3: 0 9 * * *
-Output: *Scheduled* `#3` to run at `0 9 * * *`\.
-
-Input: Failed: I need the task id to complete.
-Output: Sorry — I need the task id to complete\.
-
-Reply with the message text only, under 250 characters.
+- *bold* action verbs (created, scheduled, completed, cancelled, updated, added).
+- `code` for ids and cron expressions.
+- _italic_ for task or event titles.
+- Escape reserved chars outside formatting: _ * [ ] ( ) ~ ` > # + - = | { } . !  (period = \., hyphen = \-)
+- Keep all ids, priorities, dates, titles verbatim.
+- Under 250 chars.

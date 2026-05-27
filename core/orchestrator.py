@@ -24,8 +24,14 @@ import logging
 from typing import Optional
 
 from .agent_factory import registry
-from .db import DB_PATH, bootstrap, conversations, users
+from .db import DB_PATH, bootstrap, conversations, user_profile, users
 from .llm_gateway import LLMGateway
+from .output_extractor import (
+    extract_action_log,
+    extract_formatted_message,
+    extract_last_paragraph,
+    extract_plan,
+)
 from .state_manager import StateManager
 
 log = logging.getLogger(__name__)
@@ -67,22 +73,74 @@ class Orchestrator:
                 await self._run_agent(override, text, user_id, persistent=False)
                 reply = None
             else:
-                orch_output = await self._run_agent(
-                    "Orchestrator", text, user_id, persistent=True
-                )
-                # Pass Orchestrator's structured summary through Scribe to get a
-                # MarkdownV2 user-facing message. Scribe runs ephemeral — no
-                # need for its rewriting history to persist.
-                if orch_output and orch_output.strip():
-                    reply = await self._run_agent(
-                        "Scribe", orch_output, user_id, persistent=False
-                    )
-                else:
-                    log.warning("Orchestrator returned empty output for user=%s", user_id)
-                    reply = None
+                reply = await self._run_pipeline(text, user_id)
 
         if reply:
             conversations.append(user_id, "assistant", reply)
+        return reply
+
+    async def _run_pipeline(self, text: str, user_id: int) -> Optional[str]:
+        """Planner -> Orchestrator -> Personalizer -> Scribe.
+
+        Between every stage we run a Python extractor that strips the model's
+        chain-of-thought and keeps only the structured portion of its output.
+        This decouples concerns cleanly: Planner thinks, code extracts the
+        plan, Orchestrator only ever sees the plan (no Planner reasoning).
+        """
+        # --- 1. Planner --------------------------------------------------
+        planner_raw = await self._run_agent("Planner", text, user_id, persistent=False)
+        plan = extract_plan(planner_raw or "")
+        if not plan:
+            log.warning(
+                "Planner produced no parseable plan for user=%s. raw=%r",
+                user_id,
+                (planner_raw or "")[:300],
+            )
+            return None
+        log.info("plan for user=%s:\n%s", user_id, plan)
+
+        # --- 2. Orchestrator (executor) ----------------------------------
+        if plan.strip() == "1. None":
+            action_log = "No actions taken."
+        else:
+            orch_raw = await self._run_agent(
+                "Orchestrator", plan, user_id, persistent=True
+            )
+            action_log = extract_action_log(orch_raw or "")
+            if not action_log:
+                log.warning(
+                    "Orchestrator produced no parseable action log for user=%s. raw=%r",
+                    user_id,
+                    (orch_raw or "")[:300],
+                )
+                return None
+        log.info("action_log for user=%s:\n%s", user_id, action_log)
+
+        # --- 3. Personalizer ---------------------------------------------
+        profile = user_profile.get(user_id) or {}
+        ctx = (profile.get("rolling_context_summary") or "").strip() or "(no profile yet)"
+        personalizer_input = f"User context: {ctx}\n\nAction log:\n{action_log}"
+        pers_raw = await self._run_agent(
+            "Personalizer", personalizer_input, user_id, persistent=False
+        )
+        prose = extract_last_paragraph(pers_raw or "")
+        if not prose:
+            log.warning(
+                "Personalizer produced no clean paragraph for user=%s. Falling back to action_log.",
+                user_id,
+            )
+            prose = action_log
+
+        # --- 4. Scribe ----------------------------------------------------
+        scribe_raw = await self._run_agent("Scribe", prose, user_id, persistent=False)
+        reply = extract_formatted_message(scribe_raw or "")
+        if not reply:
+            log.warning(
+                "Scribe produced no formatted output for user=%s. raw=%r",
+                user_id,
+                (scribe_raw or "")[:300],
+            )
+            return None
         return reply
 
     async def handle_scheduled(self, user_id: int, prompt_payload: str) -> None:

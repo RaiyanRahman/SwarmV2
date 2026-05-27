@@ -1,0 +1,5 @@
+Rewrite the action log into ONE short sentence the user will see. Keep every id, priority, cron expression, title, and date verbatim. Adapt tone to the user context if present; otherwise stay warm and concise.
+
+Output: the sentence ONLY. No drafts, no reasoning, no headings, no quotes. Under 35 words.
+
+If the action log is "No actions taken.", output one short conversational acknowledgement.

@@ -19,16 +19,35 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
 """
 
 
-def create(user_id: int, cron_expression: str, prompt_payload: str) -> int:
+def create(
+    user_id: int,
+    cron_expression: str,
+    prompt_payload: str,
+    report_id: Optional[int] = None,
+) -> int:
     with connect() as conn:
         cur = conn.execute(
             """
-            INSERT INTO scheduled_tasks (user_id, cron_expression, prompt_payload)
-            VALUES (?, ?, ?)
+            INSERT INTO scheduled_tasks (user_id, cron_expression, prompt_payload, report_id)
+            VALUES (?, ?, ?, ?)
             """,
-            (user_id, cron_expression, prompt_payload),
+            (user_id, cron_expression, prompt_payload, report_id),
         )
         return int(cur.lastrowid)
+
+
+def exists_for(user_id: int, cron_expression: str, prompt_payload: str) -> bool:
+    """Used by the bootstrap seeder to stay idempotent."""
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT 1 FROM scheduled_tasks
+            WHERE user_id = ? AND cron_expression = ? AND prompt_payload = ?
+            LIMIT 1
+            """,
+            (user_id, cron_expression, prompt_payload),
+        ).fetchone()
+        return row is not None
 
 
 def list_active() -> list[dict]:

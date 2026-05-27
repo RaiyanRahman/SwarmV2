@@ -35,16 +35,38 @@ def connect() -> sqlite3.Connection:
 
 
 def init_all() -> None:
-    """Create every table if missing. Idempotent."""
-    from . import users, user_profile, conversations, action_items, scheduled_tasks
+    """Create every table if missing. Idempotent.
+
+    Also runs lightweight column migrations (ADD COLUMN IF NOT EXISTS-style)
+    for changes added after the initial schema landed.
+    """
+    from . import (
+        users,
+        user_profile,
+        conversations,
+        action_items,
+        scheduled_tasks,
+        reports,
+    )
 
     schemas: Iterable[str] = (
         users.SCHEMA,
         user_profile.SCHEMA,
         conversations.SCHEMA,
         action_items.SCHEMA,
+        reports.SCHEMA,         # must precede scheduled_tasks (FK target)
         scheduled_tasks.SCHEMA,
     )
     with connect() as conn:
         for ddl in schemas:
             conn.execute(ddl)
+        _migrate(conn)
+
+
+def _migrate(conn) -> None:
+    """Apply additive migrations. SQLite has no IF NOT EXISTS for columns."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(scheduled_tasks)").fetchall()}
+    if "report_id" not in cols:
+        conn.execute(
+            "ALTER TABLE scheduled_tasks ADD COLUMN report_id INTEGER REFERENCES reports(id) ON DELETE CASCADE"
+        )

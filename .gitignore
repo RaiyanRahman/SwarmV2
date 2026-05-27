@@ -21,5 +21,8 @@ data/*.db-shm
 .idea/
 .DS_Store
 
+# Claude Code per-machine settings
+.claude/
+
 # Logs
 *.log

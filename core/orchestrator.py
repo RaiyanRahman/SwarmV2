@@ -18,7 +18,7 @@ import logging
 from typing import Optional
 
 from .agent_factory import registry
-from .db import conversations, users
+from .db import bootstrap, conversations, users
 from .llm_gateway import LLMGateway
 from .state_manager import StateManager
 
@@ -37,6 +37,7 @@ class Orchestrator:
     ) -> Optional[str]:
         """Top-level entrypoint called by CommunicationBridge."""
         user_id = users.get_or_create(telegram_id)
+        bootstrap.seed_user_defaults(user_id)
         state = StateManager(user_data)
         state.set("INTERNAL_USER_ID", user_id)
 

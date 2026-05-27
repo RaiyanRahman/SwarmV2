@@ -20,12 +20,17 @@ import os
 import sys
 from typing import Optional
 
+from dotenv import load_dotenv
+
 from core import db
 from core.agent_factory import registry, start_hot_reload
 from core.communication_bridge import CommunicationBridge
 from core.llm_gateway import LLMConfig, LLMGateway
 from core.orchestrator import Orchestrator
 from core.scheduler import Scheduler
+
+# Load project-local .env before any os.environ reads in main().
+load_dotenv()
 
 log = logging.getLogger(__name__)
 

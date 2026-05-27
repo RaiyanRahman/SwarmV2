@@ -1,7 +1,8 @@
 {
   "name": "Orchestrator",
   "model": "ollama_chat/gemma4:e4b",
-  "description": "Root planner. Builds a sequential plan and calls sub-agents one at a time via tools.",
-  "tools": ["create_action_item"],
+  "description": "Root planner. Builds a sequential plan and calls sub-agents one at a time via agent_tools.",
+  "tools": [],
+  "agent_tools": ["TaskMaster", "Chronos", "Reporter", "Archivist", "Profiler", "Summarizer", "CheckIn"],
   "output_key": "orchestrator_output"
 }

@@ -35,6 +35,10 @@ APP_NAME = "SwarmV2"
 
 class Orchestrator:
     def __init__(self) -> None:
+        # Inference serialization happens at the TURN scope here. One full
+        # inbound (or scheduled) run holds the gateway lock end-to-end,
+        # so we get strict serialization across users/triggers without the
+        # deadlock that lock-at-model exhibits under AgentTool composition.
         self._gateway = LLMGateway.instance()
         self._session_service = None  # built lazily so ADK import stays optional in tests
 
@@ -53,12 +57,13 @@ class Orchestrator:
 
         conversations.append(user_id, "user", text)
 
-        override = state.active_override()
-        if override:
-            log.info("Routing to override agent %s for user=%s", override, user_id)
-            reply = await self._run_agent(override, text, user_id, persistent=False)
-        else:
-            reply = await self._run_agent("Orchestrator", text, user_id, persistent=True)
+        async with self._gateway.lock:
+            override = state.active_override()
+            if override:
+                log.info("Routing to override agent %s for user=%s", override, user_id)
+                reply = await self._run_agent(override, text, user_id, persistent=False)
+            else:
+                reply = await self._run_agent("Orchestrator", text, user_id, persistent=True)
 
         if reply:
             conversations.append(user_id, "assistant", reply)
@@ -68,7 +73,8 @@ class Orchestrator:
         """Entrypoint for Scheduler-fired proactive runs (no inbound user text)."""
         log.info("Handling scheduled prompt for user=%s", user_id)
         agent_name, body = self._parse_scheduled_payload(prompt_payload)
-        await self._run_agent(agent_name, body, user_id, persistent=False)
+        async with self._gateway.lock:
+            await self._run_agent(agent_name, body, user_id, persistent=False)
 
     # internals -----------------------------------------------------------
     @staticmethod
@@ -153,15 +159,15 @@ class Orchestrator:
         )
         content = types.Content(role="user", parts=[types.Part(text=text)])
 
-        async def _run() -> Optional[str]:
-            final_text: Optional[str] = None
-            async for event in runner.run_async(
-                user_id=str(user_id),
-                session_id=session.id,
-                new_message=content,
-            ):
-                if event.is_final_response() and event.content and event.content.parts:
-                    final_text = "".join(p.text or "" for p in event.content.parts)
-            return final_text
-
-        return await self._gateway.serialized(_run())
+        # Inference serialization happens at the model layer (LockedLiteLlm),
+        # NOT around this run — wrapping the entire run would deadlock as
+        # soon as an AgentTool triggers a sub-agent inference mid-stream.
+        final_text: Optional[str] = None
+        async for event in runner.run_async(
+            user_id=str(user_id),
+            session_id=session.id,
+            new_message=content,
+        ):
+            if event.is_final_response() and event.content and event.content.parts:
+                final_text = "".join(p.text or "" for p in event.content.parts)
+        return final_text

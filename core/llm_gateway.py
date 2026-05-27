@@ -34,6 +34,8 @@ class LLMGateway:
 
     def __init__(self, config: Optional[LLMConfig] = None) -> None:
         self.config = config or LLMConfig()
+        # Plain asyncio.Lock — taken at TURN scope by the Orchestrator, NOT
+        # per-inference. Lock-at-model deadlocks under AgentTool composition.
         self.lock = asyncio.Lock()
         self._inflight = 0
 
@@ -49,10 +51,17 @@ class LLMGateway:
         return cls._instance
 
     def build_model(self, model_override: Optional[str] = None):
-        """Return an ADK model instance pointed at our Ollama endpoint.
+        """Return a plain LiteLlm pointed at our Ollama endpoint.
 
-        Imported lazily so the rest of the package doesn't pull ADK at import time
-        (helps unit tests run without the framework installed).
+        We do NOT wrap the model with a per-inference lock. Lock-at-model
+        deadlocks under ADK AgentTool composition because ADK runs the
+        sub-agent in a separate asyncio task while the parent's
+        generate_content_async generator is still suspended at its `yield`,
+        so the lock can't be re-entered. Instead, the Orchestrator takes
+        the gateway lock at the TURN scope (one full inbound or scheduled
+        run at a time), which gives us cross-user/cross-trigger
+        serialization without lock-across-yield issues. See
+        Orchestrator.handle_inbound for the call site.
         """
         from google.adk.models.lite_llm import LiteLlm  # type: ignore
 
@@ -60,16 +69,3 @@ class LLMGateway:
             model=model_override or self.config.model,
             api_base=self.config.api_base,
         )
-
-    async def serialized(self, coro):
-        """Run an awaitable under the global inference lock.
-
-        Use this when calling any code path that may invoke the LLM.
-        """
-        async with self.lock:
-            self._inflight += 1
-            log.debug("LLM lock acquired (inflight=%d)", self._inflight)
-            try:
-                return await coro
-            finally:
-                self._inflight -= 1

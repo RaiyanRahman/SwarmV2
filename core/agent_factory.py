@@ -8,16 +8,23 @@ Directory layout:
 
 agent.json schema:
 {
-  "name": "Scribe",
-  "model": "ollama_chat/gemma4:e4b",    // optional override of gateway default
+  "name": "Orchestrator",
+  "model": "ollama_chat/gemma4:e4b",        // optional override of gateway default
   "description": "...",
-  "tools": ["create_action_item", ...], // names matching tools/<name>/
-  "output_key": "scribe_output"          // optional, ADK output channel
+  "tools": ["create_action_item", ...],     // FunctionTools from tools/<name>/
+  "agent_tools": ["TaskMaster", "Chronos"], // sub-agents exposed as AgentTool
+  "output_key": "orchestrator_output"        // optional
 }
+
+`agent_tools` is intentionally distinct from ADK's built-in `sub_agents`
+field. SwarmV2 forbids A2A: sub-agents do not delegate to one another. The
+Orchestrator (and only the Orchestrator) calls them sequentially via
+AgentTool wrappers, which makes every cross-agent transition an explicit
+function_call event the parent LLM can observe.
 
 The instruction lives in instruction.txt next to agent.json so it can be
 edited freely (multi-line, no JSON escaping). Watchdog watches both files
-and reloads the agent when either changes.
+and reloads the agent (and any composite that names it) when either changes.
 """
 
 from __future__ import annotations
@@ -73,16 +80,20 @@ def _build_function_tool(tool_name: str):
     return FunctionTool(func=fn)
 
 
+def _build_agent_tool(agent_name: str, reg: "AgentRegistry"):
+    """Wrap an existing agent in an ADK AgentTool so a parent agent can call it."""
+    from google.adk.tools.agent_tool import AgentTool  # type: ignore
+
+    sub_agent = reg.get(agent_name)  # raises KeyError if not yet loaded
+    return AgentTool(agent=sub_agent)
+
+
 # ---------------------------------------------------------------------------
 # Agent loading
 # ---------------------------------------------------------------------------
 
 def _read_instruction(agent_dir: Path) -> str:
-    """Load the system prompt from agent_dir/instruction.txt.
-
-    Missing or empty is allowed but logged — an agent with no instruction is
-    valid (Scribe-style passthrough) but usually a mistake.
-    """
+    """Load the system prompt from agent_dir/instruction.txt."""
     path = agent_dir / "instruction.txt"
     if not path.exists():
         log.warning("No instruction.txt for agent dir %s", agent_dir)
@@ -90,20 +101,37 @@ def _read_instruction(agent_dir: Path) -> str:
     return path.read_text(encoding="utf-8").strip()
 
 
-def _build_agent(config_path: Path):
-    """Build an ADK LlmAgent from a single agent.json file."""
+def _build_agent(config_path: Path, reg: "AgentRegistry"):
+    """Build an ADK LlmAgent from agent.json.
+
+    The registry is passed in so composite agents (those declaring
+    agent_tools) can resolve their sub-agent references. Leaf agents
+    don't touch it.
+    """
     from google.adk.agents import LlmAgent  # type: ignore
 
     data = json.loads(config_path.read_text())
     agent_dir = config_path.parent
     name = data.get("name") or agent_dir.name
 
-    tools = []
+    tools: list[Any] = []
     for tool_name in data.get("tools", []):
         try:
             tools.append(_build_function_tool(tool_name))
         except Exception:
             log.exception("Failed to load tool %r for agent %s; skipping", tool_name, name)
+
+    for sub_name in data.get("agent_tools", []):
+        try:
+            tools.append(_build_agent_tool(sub_name, reg))
+        except KeyError:
+            log.warning(
+                "Sub-agent %r referenced by %s not yet loaded; skipping for this pass",
+                sub_name,
+                name,
+            )
+        except Exception:
+            log.exception("Failed to wrap sub-agent %r for %s; skipping", sub_name, name)
 
     gateway = LLMGateway.instance()
     model = gateway.build_model(data.get("model"))
@@ -119,6 +147,16 @@ def _build_agent(config_path: Path):
         kwargs["output_key"] = data["output_key"]
 
     return LlmAgent(**kwargs)
+
+
+def _read_agent_tools(config_path: Path) -> list[str]:
+    """Read just the agent_tools list from agent.json without building anything."""
+    try:
+        data = json.loads(config_path.read_text())
+        return list(data.get("agent_tools", []))
+    except Exception:
+        log.exception("Failed to parse %s for agent_tools listing", config_path)
+        return []
 
 
 # ---------------------------------------------------------------------------
@@ -155,21 +193,72 @@ class AgentRegistry:
         with self._lock:
             self._agents.pop(name, None)
 
+    # --- bulk loading ----------------------------------------------------
+
     def load_all(self) -> None:
-        """Load every agents/<AgentName>/agent.json from disk."""
+        """Two-pass load so composite agents can resolve their sub-agents.
+
+        Pass 1: every agent that has NO agent_tools (leaves).
+        Pass 2: every agent that has agent_tools (composites). By now their
+        referenced sub-agents exist in the registry.
+
+        Dependent rebuilds are suppressed during bulk load — composites get
+        their explicit build in pass 2.
+        """
         if not AGENTS_DIR.exists():
             log.warning("agents directory missing: %s", AGENTS_DIR)
             return
-        for config_path in AGENTS_DIR.glob("*/agent.json"):
-            self._reload_from_path(config_path)
 
-    def _reload_from_path(self, config_path: Path) -> None:
+        configs = list(AGENTS_DIR.glob("*/agent.json"))
+        leaves = [p for p in configs if not _read_agent_tools(p)]
+        composites = [p for p in configs if _read_agent_tools(p)]
+
+        for cp in leaves:
+            self._reload_from_path(cp, rebuild_dependents=False)
+        for cp in composites:
+            self._reload_from_path(cp, rebuild_dependents=False)
+
+    # --- single reload ---------------------------------------------------
+
+    def _reload_from_path(self, config_path: Path, rebuild_dependents: bool = True) -> None:
         try:
-            agent = _build_agent(config_path)
+            agent = _build_agent(config_path, self)
             self.set(agent.name, agent)
             log.info("Loaded agent %s from %s", agent.name, config_path)
         except Exception:
             log.exception("Failed to build agent from %s", config_path)
+            return
+
+        # If a leaf agent changed during a hot reload, every composite that
+        # names it must be rebuilt so its AgentTool wrapper points at the
+        # new instance. We skip this during bulk load (load_all does its
+        # own explicit second pass).
+        if rebuild_dependents:
+            self._rebuild_dependents(agent.name)
+
+    def _rebuild_dependents(self, changed_agent_name: str) -> None:
+        """Re-emit any composite agent that lists `changed_agent_name` in its agent_tools."""
+        for cp in AGENTS_DIR.glob("*/agent.json"):
+            sub_names = _read_agent_tools(cp)
+            if not sub_names or changed_agent_name not in sub_names:
+                continue
+            # Skip self-trigger if changed_agent_name IS the composite.
+            try:
+                this_name = json.loads(cp.read_text()).get("name", cp.parent.name)
+            except Exception:
+                this_name = cp.parent.name
+            if this_name == changed_agent_name:
+                continue
+            try:
+                composite = _build_agent(cp, self)
+                self.set(composite.name, composite)
+                log.info(
+                    "Rebuilt composite %s after leaf %s changed",
+                    composite.name,
+                    changed_agent_name,
+                )
+            except Exception:
+                log.exception("Failed to rebuild composite %s after leaf change", cp)
 
 
 # ---------------------------------------------------------------------------
@@ -184,7 +273,6 @@ class _ConfigChangeHandler(FileSystemEventHandler):
 
     def _maybe_reload(self, path_str: str) -> None:
         path = Path(path_str)
-        # Watch both the JSON config and the externalized instruction file.
         if path.name == "agent.json":
             config_path = path
         elif path.name == "instruction.txt":
@@ -216,10 +304,7 @@ class _ConfigChangeHandler(FileSystemEventHandler):
 
 
 def start_hot_reload(registry: AgentRegistry) -> Observer:
-    """Begin watching agents/ for changes. Returns the running observer.
-
-    Caller is responsible for stop()/join() at shutdown.
-    """
+    """Begin watching agents/ for changes."""
     handler = _ConfigChangeHandler(registry)
     observer = Observer()
     observer.schedule(handler, str(AGENTS_DIR), recursive=True)
@@ -229,7 +314,7 @@ def start_hot_reload(registry: AgentRegistry) -> Observer:
     return observer
 
 
-# Module-level singleton for convenience ------------------------------------
+# Module-level singleton ----------------------------------------------------
 _registry: Optional[AgentRegistry] = None
 
 

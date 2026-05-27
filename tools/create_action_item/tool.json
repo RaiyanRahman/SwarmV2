@@ -1,13 +1,9 @@
 {
   "name": "create_action_item",
-  "description": "Create a new action item (task) for a user with a P0–P4 priority. Returns the new item's id and a confirmation message.",
+  "description": "Create a new action item (task) for the current user with a P0–P4 priority. Returns the new item's id and a confirmation message. The acting user is resolved from session state — do NOT pass user_id.",
   "parameters": {
     "type": "object",
     "properties": {
-      "user_id": {
-        "type": "integer",
-        "description": "Internal user id (users.id). The orchestrator injects this; do not fabricate it."
-      },
       "title": {
         "type": "string",
         "description": "Short imperative summary of the task, e.g. 'Send invoice to Acme'."
@@ -26,6 +22,6 @@
         "description": "Optional ISO-8601 datetime. If omitted, the item has no deadline."
       }
     },
-    "required": ["user_id", "title", "priority"]
+    "required": ["title", "priority"]
   }
 }

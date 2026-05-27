@@ -93,8 +93,12 @@ class Orchestrator:
         from google.genai import types  # type: ignore
 
         runner = InMemoryRunner(agent=agent, app_name="SwarmV2")
+        # Seed session state with the internal user_id so tools resolve it via
+        # tool_context.state instead of relying on the LLM to pass it.
         session = await runner.session_service.create_session(
-            app_name="SwarmV2", user_id=str(user_id)
+            app_name="SwarmV2",
+            user_id=str(user_id),
+            state={"user_id": user_id},
         )
         content = types.Content(role="user", parts=[types.Part(text=text)])
 

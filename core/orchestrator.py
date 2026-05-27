@@ -159,14 +159,22 @@ class Orchestrator:
         return "Orchestrator", payload
 
     def _get_session_service(self):
-        """Lazy-init the DatabaseSessionService pointed at our SQLite file."""
+        """Lazy-init the DatabaseSessionService pointed at its own SQLite file.
+
+        ADK gets a separate file (data/adk_sessions.db) so its async-SQLAlchemy
+        connections don't share WAL/SHM state with our sync sqlite3 connections
+        in core.db. Mixing the two against one file produced spurious
+        `disk I/O error` failures inside the runner.
+        """
         if self._session_service is None:
             from google.adk.sessions import DatabaseSessionService  # type: ignore
 
+            adk_db = DB_PATH.parent / "adk_sessions.db"
+            adk_db.parent.mkdir(parents=True, exist_ok=True)
             # ADK's DatabaseSessionService uses async SQLAlchemy, so the dialect
             # must be sqlite+aiosqlite (the plain sqlite:// driver is sync-only).
             self._session_service = DatabaseSessionService(
-                db_url=f"sqlite+aiosqlite:///{DB_PATH}"
+                db_url=f"sqlite+aiosqlite:///{adk_db}"
             )
         return self._session_service
 

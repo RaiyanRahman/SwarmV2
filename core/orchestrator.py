@@ -2,14 +2,20 @@
 
 Flow for an inbound user message:
   1. StateManager check: is an agent override active (e.g. CHECK_IN_PENDING)?
-     If yes, route straight to that agent. The Orchestrator-LLM is skipped.
-  2. Otherwise: run Scribe (sanitize + intent extraction) → Orchestrator-LLM
-     (plans + invokes sub-agent tools sequentially) → Scribe (format reply).
+     If yes, route straight to that agent on an ephemeral session.
+  2. Otherwise: run the Orchestrator agent on the user's *persistent*
+     ADK session (created on first contact, reused thereafter).
   3. Every LLM call goes through LLMGateway.serialized() so inference is
      strictly serialized.
 
-This module deliberately keeps no per-user state — that lives in StateManager
-(short-term) and the database (long-term).
+Persistent vs ephemeral sessions
+--------------------------------
+Each user gets ONE persistent ADK session for their main conversation
+thread (tracked by users.adk_session_id). Override agents like CheckIn
+fire on transient prompts and use ephemeral sessions that are discarded
+after the run — those bursts shouldn't pollute the user's rolling chat.
+
+Scheduled proactive runs also use ephemeral sessions for the same reason.
 """
 
 from __future__ import annotations
@@ -18,17 +24,21 @@ import logging
 from typing import Optional
 
 from .agent_factory import registry
-from .db import bootstrap, conversations, users
+from .db import DB_PATH, bootstrap, conversations, users
 from .llm_gateway import LLMGateway
 from .state_manager import StateManager
 
 log = logging.getLogger(__name__)
 
+APP_NAME = "SwarmV2"
+
 
 class Orchestrator:
     def __init__(self) -> None:
         self._gateway = LLMGateway.instance()
+        self._session_service = None  # built lazily so ADK import stays optional in tests
 
+    # public --------------------------------------------------------------
     async def handle_inbound(
         self,
         text: str,
@@ -46,28 +56,21 @@ class Orchestrator:
         override = state.active_override()
         if override:
             log.info("Routing to override agent %s for user=%s", override, user_id)
-            reply = await self._run_agent(override, text, user_id)
+            reply = await self._run_agent(override, text, user_id, persistent=False)
         else:
-            reply = await self._run_pipeline(text, user_id)
+            reply = await self._run_agent("Orchestrator", text, user_id, persistent=True)
 
         if reply:
             conversations.append(user_id, "assistant", reply)
         return reply
 
     async def handle_scheduled(self, user_id: int, prompt_payload: str) -> None:
-        """Entrypoint for Scheduler-fired proactive runs (no inbound user text).
-
-        Typical use: a Reporter morning brief or a CheckIn nudge. The result is
-        delivered via the CommunicationBridge by the sub-agent's own tool calls,
-        so this method returns None.
-        """
+        """Entrypoint for Scheduler-fired proactive runs (no inbound user text)."""
         log.info("Handling scheduled prompt for user=%s", user_id)
-        # By convention scheduled payloads are routed to Orchestrator unless the
-        # payload specifies an explicit agent prefix like "agent:CheckIn|...".
         agent_name, body = self._parse_scheduled_payload(prompt_payload)
-        await self._run_agent(agent_name, body, user_id)
+        await self._run_agent(agent_name, body, user_id, persistent=False)
 
-    # --- internals ---------------------------------------------------------
+    # internals -----------------------------------------------------------
     @staticmethod
     def _parse_scheduled_payload(payload: str) -> tuple[str, str]:
         if payload.startswith("agent:"):
@@ -75,30 +78,78 @@ class Orchestrator:
             return head.removeprefix("agent:").strip(), body.strip()
         return "Orchestrator", payload
 
-    async def _run_pipeline(self, text: str, user_id: int) -> Optional[str]:
-        # Scribe (inbound) → Orchestrator-LLM → Scribe (outbound) is the canonical
-        # path. Implementing the full ADK Runner wiring is Phase 2 work; for now
-        # we execute the Orchestrator agent directly and let Scribe format inside
-        # its tool calls. The structure stays sequential and lock-serialized.
-        return await self._run_agent("Orchestrator", text, user_id)
+    def _get_session_service(self):
+        """Lazy-init the DatabaseSessionService pointed at our SQLite file."""
+        if self._session_service is None:
+            from google.adk.sessions import DatabaseSessionService  # type: ignore
 
-    async def _run_agent(self, agent_name: str, text: str, user_id: int) -> Optional[str]:
+            # ADK's DatabaseSessionService uses async SQLAlchemy, so the dialect
+            # must be sqlite+aiosqlite (the plain sqlite:// driver is sync-only).
+            self._session_service = DatabaseSessionService(
+                db_url=f"sqlite+aiosqlite:///{DB_PATH}"
+            )
+        return self._session_service
+
+    async def _resolve_session(self, user_id: int, persistent: bool):
+        """Return an ADK session, creating it on first contact if persistent.
+
+        For ephemeral runs (override agents, scheduled fires) we always
+        create a throwaway session and never persist its id on users.
+        """
+        from google.adk.sessions import DatabaseSessionService  # noqa: F401  (ensure import path)
+
+        svc = self._get_session_service()
+        uid_str = str(user_id)
+
+        if not persistent:
+            return await svc.create_session(
+                app_name=APP_NAME, user_id=uid_str, state={"user_id": user_id}
+            )
+
+        existing_id = users.get_adk_session_id(user_id)
+        if existing_id:
+            session = await svc.get_session(
+                app_name=APP_NAME, user_id=uid_str, session_id=existing_id
+            )
+            if session is not None:
+                # State could have been wiped in some edge cases; ensure user_id present.
+                if session.state.get("user_id") != user_id:
+                    session.state["user_id"] = user_id
+                return session
+            log.warning(
+                "Stored adk_session_id=%s for user=%s not found; creating fresh",
+                existing_id,
+                user_id,
+            )
+
+        session = await svc.create_session(
+            app_name=APP_NAME, user_id=uid_str, state={"user_id": user_id}
+        )
+        users.set_adk_session_id(user_id, session.id)
+        return session
+
+    async def _run_agent(
+        self,
+        agent_name: str,
+        text: str,
+        user_id: int,
+        *,
+        persistent: bool,
+    ) -> Optional[str]:
         try:
             agent = registry().get(agent_name)
         except KeyError:
             log.error("Agent %s not loaded", agent_name)
             return f"(internal error: agent {agent_name!r} unavailable)"
 
-        from google.adk.runners import InMemoryRunner  # type: ignore
+        from google.adk.runners import Runner  # type: ignore
         from google.genai import types  # type: ignore
 
-        runner = InMemoryRunner(agent=agent, app_name="SwarmV2")
-        # Seed session state with the internal user_id so tools resolve it via
-        # tool_context.state instead of relying on the LLM to pass it.
-        session = await runner.session_service.create_session(
-            app_name="SwarmV2",
-            user_id=str(user_id),
-            state={"user_id": user_id},
+        session = await self._resolve_session(user_id, persistent=persistent)
+        runner = Runner(
+            agent=agent,
+            app_name=APP_NAME,
+            session_service=self._get_session_service(),
         )
         content = types.Content(role="user", parts=[types.Part(text=text)])
 

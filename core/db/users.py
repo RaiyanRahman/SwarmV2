@@ -44,3 +44,21 @@ def get_telegram_id(user_id: int) -> Optional[str]:
             "SELECT telegram_id FROM users WHERE id = ?", (user_id,)
         ).fetchone()
         return row["telegram_id"] if row else None
+
+
+def get_adk_session_id(user_id: int) -> Optional[str]:
+    """Return the user's current persistent ADK session id, or None."""
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT adk_session_id FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
+        return row["adk_session_id"] if row else None
+
+
+def set_adk_session_id(user_id: int, session_id: Optional[str]) -> None:
+    """Persist (or clear) the user's main ADK conversation session id."""
+    with connect() as conn:
+        conn.execute(
+            "UPDATE users SET adk_session_id = ? WHERE id = ?",
+            (session_id, user_id),
+        )

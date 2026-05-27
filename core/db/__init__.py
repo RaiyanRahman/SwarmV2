@@ -65,8 +65,11 @@ def init_all() -> None:
 
 def _migrate(conn) -> None:
     """Apply additive migrations. SQLite has no IF NOT EXISTS for columns."""
-    cols = {r["name"] for r in conn.execute("PRAGMA table_info(scheduled_tasks)").fetchall()}
-    if "report_id" not in cols:
+    st_cols = {r["name"] for r in conn.execute("PRAGMA table_info(scheduled_tasks)").fetchall()}
+    if "report_id" not in st_cols:
         conn.execute(
             "ALTER TABLE scheduled_tasks ADD COLUMN report_id INTEGER REFERENCES reports(id) ON DELETE CASCADE"
         )
+    u_cols = {r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
+    if "adk_session_id" not in u_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN adk_session_id TEXT")

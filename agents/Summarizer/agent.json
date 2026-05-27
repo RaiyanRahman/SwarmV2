@@ -1,0 +1,7 @@
+{
+  "name": "Summarizer",
+  "model": "ollama_chat/gemma4:e4b",
+  "description": "On-demand context compressor. Given a criteria string, reads user_profile and emits a 2–3 sentence block for prompt injection.",
+  "tools": [],
+  "output_key": "summarizer_output"
+}

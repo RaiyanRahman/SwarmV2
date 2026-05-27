@@ -1,0 +1,7 @@
+{
+  "name": "SelfReflect",
+  "model": "ollama_chat/gemma4:e4b",
+  "description": "Overseer. Scans the DB for stale P0/P1 items and habit decay; queues proposed mutations for CheckIn to surface.",
+  "tools": [],
+  "output_key": "selfreflect_output"
+}

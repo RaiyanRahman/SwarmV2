@@ -1,0 +1,7 @@
+{
+  "name": "Profiler",
+  "model": "ollama_chat/gemma4:e4b",
+  "description": "Long-term user modeler. Reads archived logs to extract traits/routines and refresh the rolling_context_summary.",
+  "tools": [],
+  "output_key": "profiler_output"
+}

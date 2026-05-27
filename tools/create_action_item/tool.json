@@ -1,0 +1,31 @@
+{
+  "name": "create_action_item",
+  "description": "Create a new action item (task) for a user with a P0–P4 priority. Returns the new item's id and a confirmation message.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "user_id": {
+        "type": "integer",
+        "description": "Internal user id (users.id). The orchestrator injects this; do not fabricate it."
+      },
+      "title": {
+        "type": "string",
+        "description": "Short imperative summary of the task, e.g. 'Send invoice to Acme'."
+      },
+      "priority": {
+        "type": "string",
+        "enum": ["P0", "P1", "P2", "P3", "P4"],
+        "description": "P0 critical/blocker, P1 24h urgent, P2 standard, P3 backlog, P4 log/reference."
+      },
+      "content_details": {
+        "type": "string",
+        "description": "Optional longer description, links, or context."
+      },
+      "target_date": {
+        "type": "string",
+        "description": "Optional ISO-8601 datetime. If omitted, the item has no deadline."
+      }
+    },
+    "required": ["user_id", "title", "priority"]
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "CheckIn",
+  "model": "ollama_chat/gemma4:e4b",
+  "description": "Proactive nudger. Sends a single check-in message, sets CHECK_IN_PENDING, processes the user's reply, and closes the loop.",
+  "tools": [],
+  "output_key": "checkin_output"
+}

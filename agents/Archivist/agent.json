@@ -1,0 +1,7 @@
+{
+  "name": "Archivist",
+  "model": "ollama_chat/gemma4:e4b",
+  "description": "Conversation indexer. Triggers when the active window hits ~20 messages; condenses, indexes, and clears the active context.",
+  "tools": [],
+  "output_key": "archivist_output"
+}

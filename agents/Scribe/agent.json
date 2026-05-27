@@ -1,0 +1,7 @@
+{
+  "name": "Scribe",
+  "model": "ollama_chat/gemma4:e4b",
+  "description": "Telegram boundary agent. Sanitizes inbound text and formats outbound replies. Holds no domain logic.",
+  "tools": [],
+  "output_key": "scribe_output"
+}

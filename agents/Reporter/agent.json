@@ -1,0 +1,7 @@
+{
+  "name": "Reporter",
+  "model": "ollama_chat/gemma4:e4b",
+  "description": "Daily briefer. Produces Morning Brief and Evening Review by aggregating action_items and scheduled_tasks for the user.",
+  "tools": [],
+  "output_key": "reporter_output"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "Chronos",
+  "model": "ollama_chat/gemma4:e4b",
+  "description": "Time/date parser. Converts natural-language schedule requests into cron expressions or ISO datetimes, and registers background triggers.",
+  "tools": [],
+  "output_key": "chronos_output"
+}

@@ -2,6 +2,6 @@
   "name": "Reporter",
   "model": "ollama_chat/gemma4:e4b",
   "description": "Daily briefer. Produces Morning Brief and Evening Review by aggregating action_items and scheduled_tasks for the user.",
-  "tools": [],
+  "tools": ["read_report_config", "create_report", "fetch_tasks_due_today", "fetch_recent_completions", "list_action_items", "send_telegram_message"],
   "output_key": "reporter_output"
 }

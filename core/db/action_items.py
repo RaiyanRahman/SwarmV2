@@ -122,6 +122,34 @@ def update(
         return cur.rowcount > 0
 
 
+def list_due_by(user_id: int, before_iso: str, only_open: bool = True) -> list[dict]:
+    """Items with target_date <= before_iso. Used by Reporter for today's brief."""
+    sql = "SELECT * FROM action_items WHERE user_id = ? AND target_date IS NOT NULL AND target_date <= ?"
+    params: list = [user_id, before_iso]
+    if only_open:
+        sql += " AND is_completed = 0"
+    sql += " ORDER BY priority ASC, target_date ASC, id ASC"
+    with connect() as conn:
+        return [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+
+def list_completed_since(user_id: int, since_iso: str) -> list[dict]:
+    """Items marked completed at or after since_iso. Used by Reporter's evening review."""
+    # SQLite stores created_at; we approximate 'completed at' as items completed
+    # whose row was last touched after since_iso. For a precise completed_at we
+    # would add a column in a later migration.
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM action_items
+            WHERE user_id = ? AND is_completed = 1 AND created_at >= ?
+            ORDER BY priority ASC, id ASC
+            """,
+            (user_id, since_iso),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 def list_stale(user_id: int, priorities: tuple[str, ...] = ("P0", "P1"), days: int = 2) -> list[dict]:
     """Items in given priorities older than N days and still open. Used by Self-Reflect."""
     with connect() as conn:

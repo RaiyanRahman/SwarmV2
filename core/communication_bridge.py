@@ -57,6 +57,20 @@ def escape_inside_code(text: str) -> str:
     return text.replace("\\", "\\\\").replace("`", "\\`")
 
 
+# Module-level registration so tools (send_telegram_message) can reach the
+# live bridge without dependency injection.
+_active_bridge: Optional["CommunicationBridge"] = None
+
+
+def set_active_bridge(bridge: "CommunicationBridge") -> None:
+    global _active_bridge
+    _active_bridge = bridge
+
+
+def active_bridge() -> Optional["CommunicationBridge"]:
+    return _active_bridge
+
+
 class CommunicationBridge:
     """Telegram transport. One instance per process."""
 

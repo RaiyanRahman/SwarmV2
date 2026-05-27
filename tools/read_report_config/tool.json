@@ -1,0 +1,14 @@
+{
+  "name": "read_report_config",
+  "description": "Read the configuration of a report template (name, style_instructions, data_criteria). Reporter calls this first when invoked with a report_id so it knows what to fetch and how to phrase the message. Ownership-scoped.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "report_id": {
+        "type": "integer",
+        "description": "The reports.id to read. Usually supplied via session state by the Orchestrator at scheduled-fire time."
+      }
+    },
+    "required": ["report_id"]
+  }
+}

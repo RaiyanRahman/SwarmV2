@@ -1,0 +1,22 @@
+{
+  "name": "create_report",
+  "description": "Create a new report template for the current user. Use this when the user asks for a new kind of recurring summary (e.g. 'weekly fitness review'). Returns the new report's id, which you should then pass to register_schedule to actually schedule it. Name must be unique per user.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "Short label, e.g. 'Weekly Fitness Review'. Must be unique for this user."
+      },
+      "style_instructions": {
+        "type": "string",
+        "description": "Freeform prompt fragment describing how the message should be phrased (tone, length, structure)."
+      },
+      "data_criteria": {
+        "type": "string",
+        "description": "Freeform prompt fragment describing what data the report should pull (which tasks, time windows, profile fields)."
+      }
+    },
+    "required": ["name", "style_instructions", "data_criteria"]
+  }
+}

@@ -24,7 +24,7 @@ from dotenv import load_dotenv
 
 from core import db
 from core.agent_factory import registry, start_hot_reload
-from core.communication_bridge import CommunicationBridge
+from core.communication_bridge import CommunicationBridge, set_active_bridge
 from core.llm_gateway import LLMConfig, LLMGateway
 from core.orchestrator import Orchestrator
 from core.scheduler import Scheduler, set_active_scheduler
@@ -80,6 +80,7 @@ def main() -> None:
     # 5. Telegram bridge
     bridge = CommunicationBridge(token=token, allowed_telegram_ids=allowed)
     app = bridge.build()
+    set_active_bridge(bridge)
 
     # 6. Orchestrator
     orchestrator = Orchestrator()

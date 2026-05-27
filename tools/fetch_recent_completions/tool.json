@@ -1,0 +1,14 @@
+{
+  "name": "fetch_recent_completions",
+  "description": "Return the current user's action items completed within the last N hours (default 24). Used by Reporter's Evening Review.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "hours": {
+        "type": "integer",
+        "description": "Lookback window in hours. Defaults to 24."
+      }
+    },
+    "required": []
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "fetch_tasks_due_today",
+  "description": "Return the current user's open action items whose target_date is today or earlier (i.e. due-by end of today, including overdue). Ordered by priority then target_date. Use this for the Morning Brief.",
+  "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  }
+}

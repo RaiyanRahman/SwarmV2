@@ -1,0 +1,14 @@
+{
+  "name": "send_telegram_message",
+  "description": "Send a Telegram message to the current user. Use MarkdownV2 syntax: *bold*, _italic_, __underline__, ~strike~, ||spoiler||, `code`, [text](url), and > blockquote. Reserved chars (_*[]()~`>#+-=|{}.!) must be backslash-escaped outside formatting entities. Returns ok=true once delivered. Use this for proactive messages (reports, check-ins); inbound-reply formatting goes through Scribe.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "text": {
+        "type": "string",
+        "description": "MarkdownV2-formatted message body. Keep under ~1500 chars for readability."
+      }
+    },
+    "required": ["text"]
+  }
+}

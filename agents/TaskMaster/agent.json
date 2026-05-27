@@ -2,6 +2,6 @@
   "name": "TaskMaster",
   "model": "ollama_chat/gemma4:e4b",
   "description": "Owner of action_items. Creates, lists, completes, and re-prioritizes tasks using P0–P4.",
-  "tools": ["create_action_item"],
+  "tools": ["create_action_item", "list_action_items", "complete_action_item", "update_action_item"],
   "output_key": "taskmaster_output"
 }

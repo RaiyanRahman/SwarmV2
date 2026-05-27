@@ -1,0 +1,31 @@
+{
+  "name": "update_action_item",
+  "description": "Update one or more fields of an existing action item belonging to the current user. Only provided fields are changed; omit a field to leave it unchanged. At least one of title/content_details/priority/target_date must be supplied.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action_item_id": {
+        "type": "integer",
+        "description": "The id of the action item to update."
+      },
+      "title": {
+        "type": "string",
+        "description": "New title."
+      },
+      "content_details": {
+        "type": "string",
+        "description": "New longer description / context."
+      },
+      "priority": {
+        "type": "string",
+        "enum": ["P0", "P1", "P2", "P3", "P4"],
+        "description": "New priority."
+      },
+      "target_date": {
+        "type": "string",
+        "description": "New ISO-8601 datetime, or empty string to clear the deadline."
+      }
+    },
+    "required": ["action_item_id"]
+  }
+}

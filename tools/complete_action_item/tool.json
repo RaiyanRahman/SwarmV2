@@ -1,0 +1,14 @@
+{
+  "name": "complete_action_item",
+  "description": "Mark a specific action item as completed. Only succeeds if the item belongs to the current user. Returns ok=false if the id is unknown or owned by someone else.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action_item_id": {
+        "type": "integer",
+        "description": "The id of the action item to complete."
+      }
+    },
+    "required": ["action_item_id"]
+  }
+}

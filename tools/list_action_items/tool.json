@@ -1,0 +1,19 @@
+{
+  "name": "list_action_items",
+  "description": "List the current user's action items, ordered by priority then target_date. By default only open items are returned. Optionally filter by priority or include completed items.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "priority": {
+        "type": "string",
+        "enum": ["P0", "P1", "P2", "P3", "P4"],
+        "description": "If set, only return items with this priority."
+      },
+      "include_completed": {
+        "type": "boolean",
+        "description": "If true, include completed items as well. Defaults to false."
+      }
+    },
+    "required": []
+  }
+}

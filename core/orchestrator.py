@@ -60,10 +60,26 @@ class Orchestrator:
         async with self._gateway.lock:
             override = state.active_override()
             if override:
+                # Override agents (CheckIn) send their own messages via the
+                # send_telegram_message tool. Their returned text is internal
+                # status and not surfaced to the user.
                 log.info("Routing to override agent %s for user=%s", override, user_id)
-                reply = await self._run_agent(override, text, user_id, persistent=False)
+                await self._run_agent(override, text, user_id, persistent=False)
+                reply = None
             else:
-                reply = await self._run_agent("Orchestrator", text, user_id, persistent=True)
+                orch_output = await self._run_agent(
+                    "Orchestrator", text, user_id, persistent=True
+                )
+                # Pass Orchestrator's structured summary through Scribe to get a
+                # MarkdownV2 user-facing message. Scribe runs ephemeral — no
+                # need for its rewriting history to persist.
+                if orch_output and orch_output.strip():
+                    reply = await self._run_agent(
+                        "Scribe", orch_output, user_id, persistent=False
+                    )
+                else:
+                    log.warning("Orchestrator returned empty output for user=%s", user_id)
+                    reply = None
 
         if reply:
             conversations.append(user_id, "assistant", reply)

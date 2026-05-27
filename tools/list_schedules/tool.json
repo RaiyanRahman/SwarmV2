@@ -1,0 +1,14 @@
+{
+  "name": "list_schedules",
+  "description": "List the current user's scheduled tasks. Defaults to active only. Each entry includes id, cron_expression, prompt_payload, and optional report_id.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "include_inactive": {
+        "type": "boolean",
+        "description": "If true, include cancelled (is_active=0) schedules as well. Defaults to false."
+      }
+    },
+    "required": []
+  }
+}

@@ -27,7 +27,7 @@ from core.agent_factory import registry, start_hot_reload
 from core.communication_bridge import CommunicationBridge
 from core.llm_gateway import LLMConfig, LLMGateway
 from core.orchestrator import Orchestrator
-from core.scheduler import Scheduler
+from core.scheduler import Scheduler, set_active_scheduler
 
 # Load project-local .env before any os.environ reads in main().
 load_dotenv()
@@ -87,6 +87,7 @@ def main() -> None:
 
     # 7. Scheduler
     scheduler = Scheduler(on_fire=orchestrator.handle_scheduled)
+    set_active_scheduler(scheduler)
 
     async def _post_init(_app):
         scheduler.start()

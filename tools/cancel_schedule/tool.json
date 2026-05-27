@@ -1,0 +1,14 @@
+{
+  "name": "cancel_schedule",
+  "description": "Cancel (deactivate) a scheduled task by id. The row is kept for audit but set is_active=0 so the Scheduler will drop the job. Ownership-scoped.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "schedule_id": {
+        "type": "integer",
+        "description": "The scheduled_tasks.id to cancel."
+      }
+    },
+    "required": ["schedule_id"]
+  }
+}

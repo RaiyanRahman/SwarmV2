@@ -60,12 +60,39 @@ def list_active() -> list[dict]:
         ]
 
 
-def set_active(task_id: int, active: bool) -> None:
+def list_for_user(user_id: int, only_active: bool = True) -> list[dict]:
+    sql = "SELECT * FROM scheduled_tasks WHERE user_id = ?"
+    params: list = [user_id]
+    if only_active:
+        sql += " AND is_active = 1"
+    sql += " ORDER BY id ASC"
     with connect() as conn:
-        conn.execute(
-            "UPDATE scheduled_tasks SET is_active = ? WHERE id = ?",
-            (1 if active else 0, task_id),
-        )
+        return [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+
+def get_for_user(task_id: int, user_id: int) -> Optional[dict]:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM scheduled_tasks WHERE id = ? AND user_id = ?",
+            (task_id, user_id),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def set_active(task_id: int, active: bool, user_id: Optional[int] = None) -> bool:
+    """Toggle is_active. If user_id is given, ownership-scoped. Returns True if changed."""
+    with connect() as conn:
+        if user_id is None:
+            cur = conn.execute(
+                "UPDATE scheduled_tasks SET is_active = ? WHERE id = ?",
+                (1 if active else 0, task_id),
+            )
+        else:
+            cur = conn.execute(
+                "UPDATE scheduled_tasks SET is_active = ? WHERE id = ? AND user_id = ?",
+                (1 if active else 0, task_id, user_id),
+            )
+        return cur.rowcount > 0
 
 
 def set_next_run(task_id: int, next_run_at: Optional[str]) -> None:

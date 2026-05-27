@@ -90,3 +90,17 @@ class Scheduler:
     @staticmethod
     def _job_id(db_id: int) -> str:
         return f"task-{db_id}"
+
+
+# Module-level registration so tools (e.g. register_schedule) can reach the
+# live Scheduler without taking it as an argument.
+_active: Optional["Scheduler"] = None
+
+
+def set_active_scheduler(scheduler: "Scheduler") -> None:
+    global _active
+    _active = scheduler
+
+
+def active_scheduler() -> Optional["Scheduler"]:
+    return _active

@@ -1,0 +1,22 @@
+{
+  "name": "register_schedule",
+  "description": "Register a new recurring scheduled prompt for the current user. Pass a 5-field cron expression and the payload that should be executed at each fire time. Optionally link the schedule to an existing report by id (in which case the payload should be 'agent:Reporter|report_id=<id>'). The live Scheduler is reloaded immediately so the job activates without restart.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "cron_expression": {
+        "type": "string",
+        "description": "Standard 5-field cron (minute hour dom month dow), e.g. '0 9 * * *' for 9am daily, '0 18 * * 0' for 6pm Sundays."
+      },
+      "prompt_payload": {
+        "type": "string",
+        "description": "Payload sent to the Orchestrator at fire time. Use 'agent:<Name>|<body>' to route to a specific agent (e.g. 'agent:Reporter|report_id=5')."
+      },
+      "report_id": {
+        "type": "integer",
+        "description": "Optional foreign key into reports.id. When set the Scheduler routes the fire to the Reporter agent with this report template."
+      }
+    },
+    "required": ["cron_expression", "prompt_payload"]
+  }
+}

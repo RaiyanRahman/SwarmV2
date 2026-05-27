@@ -3,6 +3,25 @@
 Owns the python-telegram-bot Application and exposes send/listen primitives.
 Scribe receives this object as a tool dependency rather than importing PTB
 directly, so the agent layer stays transport-agnostic.
+
+Markdown handling
+-----------------
+Outbound text is sent with ParseMode.MARKDOWN_V2, the richer of Telegram's
+two Markdown dialects. MarkdownV2 supports:
+  *bold*, _italic_, __underline__, ~strike~, ||spoiler||, `code`,
+  ```pre```, [text](url), and > blockquote.
+
+MarkdownV2 also reserves these characters and they MUST be escaped outside
+of formatting entities:  _ * [ ] ( ) ~ ` > # + - = | { } . !
+
+Two escape helpers are exported:
+  - escape_for_v2(text): escapes every reserved char. Use for arbitrary
+    user/data text that should appear verbatim with no formatting.
+  - escape_inside_code(text): escapes ` and \\ only. Use for content
+    placed inside a `code` or ```pre``` block.
+
+If the LLM emits text that fails to parse, we retry once as plain text
+(parse_mode=None) so a malformed prompt never silently drops a message.
 """
 
 from __future__ import annotations
@@ -19,12 +38,23 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+from telegram.helpers import escape_markdown
 
 log = logging.getLogger(__name__)
 
 # Type alias: callback the bridge invokes when a Telegram message arrives.
 # It receives the raw text, the telegram_id, and PTB's per-chat user_data dict.
 InboundHandler = Callable[[str, str, dict], Awaitable[Optional[str]]]
+
+
+def escape_for_v2(text: str) -> str:
+    """Escape every MarkdownV2 reserved char in raw text."""
+    return escape_markdown(text, version=2)
+
+
+def escape_inside_code(text: str) -> str:
+    """Escape only the chars meaningful inside a code/pre block: backtick and backslash."""
+    return text.replace("\\", "\\\\").replace("`", "\\`")
 
 
 class CommunicationBridge:
@@ -57,9 +87,9 @@ class CommunicationBridge:
         self,
         telegram_id: str,
         text: str,
-        parse_mode: Optional[str] = ParseMode.MARKDOWN,
+        parse_mode: Optional[str] = ParseMode.MARKDOWN_V2,
     ) -> None:
-        """Send text to a user by Telegram id. Safe to call from any agent/tool."""
+        """Send text to a user. Falls back to plain on MarkdownV2 parse failure."""
         if self._app is None:
             raise RuntimeError("CommunicationBridge.build() must be called first")
         try:
@@ -67,7 +97,6 @@ class CommunicationBridge:
                 chat_id=int(telegram_id), text=text, parse_mode=parse_mode
             )
         except Exception:
-            # Markdown parse failures are the most common error here — retry plain.
             log.exception("send_message failed with parse_mode=%s, retrying plain", parse_mode)
             await self._app.bot.send_message(chat_id=int(telegram_id), text=text)
 
@@ -96,7 +125,7 @@ class CommunicationBridge:
 
         if reply:
             try:
-                await update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN)
+                await update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN_V2)
             except Exception:
-                log.exception("Markdown reply failed, falling back to plain")
+                log.exception("MarkdownV2 reply failed, falling back to plain")
                 await update.message.reply_text(reply)
